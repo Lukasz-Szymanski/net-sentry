@@ -8,12 +8,23 @@ from netsentry.core.notifier import Notifier
 def test_notifier_desktop():
     cfg = Config()
     notifier = Notifier(config=cfg)
+    notifier.notify_send_path = "/usr/bin/notify-send"
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
         ok, msg = notifier.send_desktop("Test Alert", "Sample message")
         assert ok is True
         assert "successfully" in msg
+
+
+def test_notifier_desktop_missing_binary():
+    cfg = Config()
+    notifier = Notifier(config=cfg)
+    notifier.notify_send_path = None
+
+    ok, msg = notifier.send_desktop("Test Alert", "Sample message")
+    assert ok is False
+    assert "not found" in msg
 
 
 def test_notifier_telegram_unconfigured():
