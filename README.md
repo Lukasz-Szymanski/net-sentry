@@ -18,9 +18,11 @@
   - **Untrusted Path Execution**: Flags binaries running from temporary directories like `/tmp/`, `/dev/shm/`, or `/var/tmp/`.
   - **Suspicious Port Alerts**: Identifies connections on backdoor ports (4444, 1337, 31337, 6667, etc.).
   - **Threat Intelligence**: Built-in and downloadable IP reputation feeds (Tor exits, botnet C2s, scanner IPs).
-- 🖥️ **Live Terminal Dashboard (TUI)**: Beautiful `htop`-style live monitoring dashboard built with Rich.
-- 🔔 **Linux Desktop Notifications**: Native `notify-send` desktop popups with rate-limiting and urgency levels.
-- 🧱 **Firewall Integration**: One-click or automated IP dropping via `iptables` / `nftables` with loopback protection.
+  - **Data Exfiltration Detection**: Alerts when processes transmit large amounts of outbound data at abnormal rates.
+- 🖥️ **Live Interactive Terminal Dashboard (TUI)**: Beautiful `htop`-style dashboard with live hotkeys (`↑/↓` cursor, `b` block IP, `k` kill process, `i` deep inspector, `?` help modal).
+- 🔔 **Multi-Channel Alert Dispatcher**: Native Linux desktop notifications, Telegram Bot API, and Discord/Slack webhook rich embeds.
+- 🧱 **Next-Gen Firewall Engine**: Native `nftables`, `ufw`, and `iptables` backends with automatic backend detection, IPv6 support, and temporary quarantine scheduling.
+- ⚡ **Kernel Tracing & eBPF Ready**: Socket event monitoring with graceful polling fallback (`netsentry bpf-status`).
 - ⚙️ **Systemd Integration**: Single-command user service setup (`netsentry install-service`).
 
 ---
@@ -120,8 +122,11 @@ Log out and log back in (Wayland) or press `Alt + F2` -> `r` (X11) to activate t
 | `netsentry status --json` | Output system metrics and alerts in JSON format |
 | `netsentry scan` | Run an instant socket scan and print security analysis table |
 | `netsentry alerts` | Display recent security events recorded in SQLite |
-| `netsentry block <IP>` | Add IP to blacklist and apply firewall DROP rule |
+| `netsentry block <IP> [-d <min>]` | Add IP to blacklist and apply firewall DROP rule (optional quarantine duration) |
+| `netsentry blocked` | List currently blocked IPs and remaining quarantine time |
 | `netsentry unblock <IP>` | Remove firewall DROP rule for IP |
+| `netsentry traffic` | Display process bandwidth consumption and data exfiltration metrics |
+| `netsentry bpf-status` | Inspect eBPF kernel tracing readiness and diagnostics |
 | `netsentry kill <PID>` | Terminate a suspicious process by PID |
 | `netsentry lookup <IP>` | Look up OSINT, reverse DNS, and GeoIP intelligence for an IP |
 | `netsentry test-notify` | Test desktop, Telegram, and Webhook notification channels |
