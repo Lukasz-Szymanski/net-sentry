@@ -75,22 +75,23 @@ Enables NetSentry to run effectively on headless servers and remote VPS instance
 
 ---
 
-## 🖥️ Phase 3: Interactive Terminal Dashboard *(Next Up)*
+## 🖥️ Phase 3: Interactive Terminal Dashboard *(Completed)*
 
 Transforms the monitoring view into a full interactive command center:
 
-- **Live Interaction**:
-  - Navigate sockets using arrow keys or Vim bindings (`j`/`k`).
-  - Press `b` to instantly drop the IP in the firewall.
-  - Press `k` to terminate the process.
-  - Press `i` to open a modal with process details, executable hashes, and open files.
-  - Press `/` to search and filter connections on the fly.
-- **Visual Enhancements**:
-  - Display country flags/codes and resolved hostnames directly in the connection table.
+- [x] **Live Interaction**:
+  - Navigate sockets using arrow keys (`↑` / `↓`).
+  - Press `b` to instantly drop the selected IP in the firewall.
+  - Press `k` to terminate the selected process by PID.
+  - Press `i` / `Enter` to open/close deep forensic inspector with process details, executable hashes, and GeoIP.
+  - Press `?` / `h` for on-screen help modal.
+  - Press `q` / `ESC` to exit cleanly.
+- [x] **Visual Enhancements**:
+  - Live cursor `▶`, selected row highlighting, country badges (`[PL]`, `[US]`, `[LAN]`), and responsive status bar.
 
 ---
 
-## 🧱 Phase 4: Advanced Engine & Next-Gen Networking
+## 🧱 Phase 4: Advanced Engine & Next-Gen Networking *(Next Up)*
 
 Deepens kernel integration and network control:
 
