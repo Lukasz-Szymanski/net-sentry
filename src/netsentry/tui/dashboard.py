@@ -293,35 +293,49 @@ class Dashboard:
         layout["footer"].update(self.generate_footer())
         return layout
 
-    def _read_key(self, timeout: float = 0.4) -> Optional[str]:
-        """Read a single keypress or escape sequence non-blockingly."""
+    def _read_key(self, timeout: float = 0.2) -> Optional[str]:
+        """Read a single keypress or escape sequence non-blockingly using os.read."""
         if not sys.stdin.isatty():
             time.sleep(timeout)
             return None
 
-        rlist, _, _ = select.select([sys.stdin], [], [], timeout)
+        fd = sys.stdin.fileno()
+        rlist, _, _ = select.select([fd], [], [], timeout)
         if not rlist:
             return None
 
-        ch = sys.stdin.read(1)
-        if ch == "\x1b":
-            r2, _, _ = select.select([sys.stdin], [], [], 0.05)
-            if r2:
-                ch2 = sys.stdin.read(1)
-                if ch2 == "[":
-                    r3, _, _ = select.select([sys.stdin], [], [], 0.05)
-                    if r3:
-                        ch3 = sys.stdin.read(1)
-                        if ch3 == "A":
-                            return "UP"
-                        elif ch3 == "B":
-                            return "DOWN"
-                        elif ch3 == "C":
-                            return "RIGHT"
-                        elif ch3 == "D":
-                            return "LEFT"
+        try:
+            data = os.read(fd, 32)
+        except OSError:
+            return None
+
+        if not data:
+            return None
+
+        # Arrow keys and common terminal escape sequences
+        if data in (b"\x1b[A", b"\x1bOA"):
+            return "UP"
+        elif data in (b"\x1b[B", b"\x1bOB"):
+            return "DOWN"
+        elif data in (b"\x1b[C", b"\x1bOC"):
+            return "RIGHT"
+        elif data in (b"\x1b[D", b"\x1bOD"):
+            return "LEFT"
+        elif data in (b"\x1b[5~",):
+            return "PAGE_UP"
+        elif data in (b"\x1b[6~",):
+            return "PAGE_DOWN"
+        elif data in (b"\x1b[H", b"\x1b[1~"):
+            return "HOME"
+        elif data in (b"\x1b[F", b"\x1b[4~"):
+            return "END"
+        elif data == b"\x1b":
             return "ESC"
-        return ch
+
+        try:
+            return data.decode("utf-8", errors="ignore")
+        except Exception:
+            return None
 
     def handle_block_action(self) -> None:
         if not self.cached_conns or self.selected_index >= len(self.cached_conns):
@@ -370,34 +384,53 @@ class Dashboard:
             tty.setcbreak(sys.stdin.fileno())
 
         try:
-            with Live(self.make_layout(), console=self.console, screen=True, refresh_per_second=6) as live:
+            with Live(self.make_layout(), console=self.console, screen=True, refresh_per_second=8) as live:
+                last_refresh = time.time()
                 while True:
-                    live.update(self.make_layout())
-                    key = self._read_key(timeout=refresh_rate)
+                    key = self._read_key(timeout=0.1)
 
-                    if not key:
-                        continue
-
-                    if key in ("q", "Q", "ESC"):
-                        if self.help_mode or self.inspect_mode:
-                            self.help_mode = False
-                            self.inspect_mode = False
-                        else:
+                    if key:
+                        if key in ("q", "Q"):
                             break
-                    elif key == "UP":
-                        self.selected_index = max(0, self.selected_index - 1)
-                    elif key == "DOWN":
-                        self.selected_index += 1
-                    elif key in ("b", "B"):
-                        self.handle_block_action()
-                    elif key in ("k", "K"):
-                        self.handle_kill_action()
-                    elif key in ("i", "I", "\n", "\r"):
-                        self.inspect_mode = not self.inspect_mode
-                        self.help_mode = False
-                    elif key in ("?", "h", "H"):
-                        self.help_mode = not self.help_mode
-                        self.inspect_mode = False
+                        elif key == "ESC":
+                            if self.help_mode or self.inspect_mode:
+                                self.help_mode = False
+                                self.inspect_mode = False
+                            else:
+                                break
+                        elif key in ("UP", "w", "W"):
+                            self.selected_index = max(0, self.selected_index - 1)
+                        elif key in ("DOWN", "s", "S"):
+                            max_idx = max(0, len(self.cached_conns) - 1)
+                            self.selected_index = min(max_idx, self.selected_index + 1)
+                        elif key == "PAGE_UP":
+                            self.selected_index = max(0, self.selected_index - 5)
+                        elif key == "PAGE_DOWN":
+                            max_idx = max(0, len(self.cached_conns) - 1)
+                            self.selected_index = min(max_idx, self.selected_index + 5)
+                        elif key == "HOME":
+                            self.selected_index = 0
+                        elif key == "END":
+                            self.selected_index = max(0, len(self.cached_conns) - 1)
+                        elif key in ("b", "B"):
+                            self.handle_block_action()
+                        elif key in ("k", "K"):
+                            self.handle_kill_action()
+                        elif key in ("i", "I", "\n", "\r", " "):
+                            self.inspect_mode = not self.inspect_mode
+                            self.help_mode = False
+                        elif key in ("?", "h", "H"):
+                            self.help_mode = not self.help_mode
+                            self.inspect_mode = False
+
+                        # Immediate screen update on any keypress
+                        live.update(self.make_layout())
+                        last_refresh = time.time()
+
+                    # Periodic refresh of network sockets
+                    elif time.time() - last_refresh >= refresh_rate:
+                        live.update(self.make_layout())
+                        last_refresh = time.time()
 
         except KeyboardInterrupt:
             pass
