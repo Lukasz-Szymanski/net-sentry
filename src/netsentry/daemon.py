@@ -16,6 +16,7 @@ from netsentry.core.detector import ThreatDetector, ThreatEvent
 from netsentry.core.firewall import Firewall
 from netsentry.core.monitor import NetworkMonitor
 from netsentry.core.notifier import Notifier
+from netsentry.core.terminator import kill_process
 from netsentry.core.threat_intel import ThreatIntel
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ class SentryDaemon:
             if threat:
                 threats_found.append(threat)
                 blocked = False
+                killed = False
 
                 # Handle Auto-Block if configured
                 if self.config.auto_block_threats:
@@ -100,6 +102,13 @@ class SentryDaemon:
                     if success:
                         self.db.add_blocked_ip(threat.remote_ip, reason=threat.threat_type)
                         blocked = True
+
+                # Handle Auto-Kill if configured
+                if self.config.auto_kill_threats and threat.pid:
+                    k_success, k_msg = kill_process(threat.pid)
+                    if k_success:
+                        killed = True
+                        logger.warning("Terminated threat process PID %d: %s", threat.pid, k_msg)
 
                 # Record in Database
                 self.db.record_alert(
@@ -112,16 +121,26 @@ class SentryDaemon:
                     pid=threat.pid,
                     details=threat.details,
                     blocked=blocked,
+                    exe_path=threat.exe_path,
+                    file_hash=threat.file_hash,
+                    killed=killed,
                 )
 
                 # Send Desktop Notification
                 if self.config.desktop_notifications:
                     title = f"🚨 NetSentry Alert [{threat.severity}]"
+                    action_notes = []
+                    if blocked:
+                        action_notes.append("🛡️ Firewall: IP Blocked")
+                    if killed:
+                        action_notes.append("🛑 Process Terminated")
+
+                    extra = f"\nAction: {', '.join(action_notes)}" if action_notes else ""
                     msg = (
                         f"Threat: {threat.threat_type}\n"
                         f"Target: {threat.remote_ip}:{threat.remote_port}\n"
                         f"Process: {threat.process_name} (PID: {threat.pid})\n"
-                        f"{threat.details}"
+                        f"{threat.details}{extra}"
                     )
                     self.notifier.send_alert(
                         title=title,

@@ -15,6 +15,7 @@ class Config:
     desktop_notifications: bool = True
     notification_cooldown_seconds: int = 30
     auto_block_threats: bool = False
+    auto_kill_threats: bool = False
     threat_score_threshold: int = 60
     suspicious_ports: List[int] = field(
         default_factory=lambda: [

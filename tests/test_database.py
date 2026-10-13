@@ -46,3 +46,28 @@ def test_database_crud():
         assert stats["total_alerts"] == 1
         assert stats["total_blocked_events"] == 1
         assert stats["active_blocked_ips"] == 0
+
+        # 5. Forensics fields and mark_alert_killed
+        alert_id_2 = db.record_alert(
+            severity="HIGH",
+            threat_type="Untrusted Binary",
+            score=90,
+            remote_ip="203.0.113.5",
+            process_name="malware",
+            pid=5555,
+            exe_path="/tmp/malware",
+            file_hash="abcdef1234567890",
+            killed=False,
+        )
+        assert db.mark_alert_killed(alert_id_2) is True
+        alerts = db.get_recent_alerts(limit=5)
+        assert alerts[0]["killed"] == 1
+        assert alerts[0]["file_hash"] == "abcdef1234567890"
+        assert alerts[0]["exe_path"] == "/tmp/malware"
+
+        # 6. IP info caching
+        db.cache_ip_info("203.0.113.5", hostname="bad.c2.net", country_code="RU")
+        cached = db.get_cached_ip_info("203.0.113.5")
+        assert cached is not None
+        assert cached["hostname"] == "bad.c2.net"
+        assert cached["country_code"] == "RU"

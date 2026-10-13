@@ -25,7 +25,10 @@ from netsentry.config import get_config_path, get_data_dir, load_config
 from netsentry.core.database import Database
 from netsentry.core.detector import ThreatDetector
 from netsentry.core.firewall import Firewall
+from netsentry.core.forensics import compute_file_hash, get_process_forensics
 from netsentry.core.monitor import NetworkMonitor
+from netsentry.core.resolver import IPResolver
+from netsentry.core.terminator import kill_process
 from netsentry.core.threat_intel import ThreatIntel
 from netsentry.daemon import SentryDaemon
 from netsentry.tui.dashboard import Dashboard
@@ -128,6 +131,8 @@ def cmd_scan() -> None:
     intel = ThreatIntel()
     detector = ThreatDetector(config, intel)
     monitor = NetworkMonitor()
+    db = Database()
+    resolver = IPResolver(db=db)
 
     console.print("[bold cyan]Scanning active sockets and listening ports...[/bold cyan]")
     conns = monitor.get_connections()
@@ -162,7 +167,12 @@ def cmd_scan() -> None:
             analysis = "[green]✓ OK[/green]"
 
         local_addr = f"{c.local_ip}:{c.local_port}"
-        remote_addr = f"{c.remote_ip}:{c.remote_port}" if c.remote_ip else "-"
+        if c.remote_ip:
+            info = resolver.resolve(c.remote_ip, fetch_geo=False)
+            badge = f" {info.badge}" if info.badge else ""
+            remote_addr = f"{c.remote_ip}:{c.remote_port}{badge}"
+        else:
+            remote_addr = "-"
 
         table.add_row(
             c.protocol,
@@ -190,19 +200,25 @@ def cmd_alerts(limit: int, severity: Optional[str]) -> None:
         return
 
     table = Table(title=f"Recent Security Alerts (Limit: {limit})", expand=True)
-    table.add_column("ID", style="dim", width=6)
-    table.add_column("Timestamp", width=20)
-    table.add_column("Severity", width=10)
+    table.add_column("ID", style="dim", width=5)
+    table.add_column("Timestamp", width=19)
+    table.add_column("Severity", width=9)
     table.add_column("Threat", style="bold red", width=22)
     table.add_column("Process", style="magenta", width=14)
-    table.add_column("Remote Target", style="yellow", width=22)
+    table.add_column("Remote Target", style="yellow", width=20)
+    table.add_column("Blocked", width=7)
+    table.add_column("Killed", width=7)
     table.add_column("Details")
-    table.add_column("Blocked", width=8)
 
     for a in alerts:
         sev = a["severity"]
         sev_style = "bold red" if sev in ("HIGH", "CRITICAL") else "bold yellow"
-        blocked_str = "[bold green]YES[/bold green]" if a["blocked"] else "[dim]NO[/dim]"
+        blocked_str = "[bold green]YES[/bold green]" if a.get("blocked") else "[dim]NO[/dim]"
+        killed_str = "[bold red]YES[/bold red]" if a.get("killed") else "[dim]NO[/dim]"
+
+        details_parts = [a["details"] or "-"]
+        if a.get("file_hash"):
+            details_parts.append(f"[dim]SHA256: {a['file_hash'][:12]}...[/dim]")
 
         table.add_row(
             str(a["id"]),
@@ -211,11 +227,82 @@ def cmd_alerts(limit: int, severity: Optional[str]) -> None:
             a["threat_type"],
             f"{a['process_name'] or '-'} ({a['pid'] or '-'})",
             f"{a['remote_ip']}:{a['remote_port'] or '-'}",
-            a["details"] or "-",
             blocked_str,
+            killed_str,
+            " | ".join(details_parts),
         )
 
     console.print(table)
+
+
+def cmd_kill(pid: int, force: bool = False) -> None:
+    """Terminate a suspicious process by PID."""
+    success, msg = kill_process(pid, force=force)
+    if success:
+        db = Database()
+        with db._get_connection() as conn:
+            conn.cursor().execute("UPDATE alerts SET killed = 1 WHERE pid = ?", (pid,))
+            conn.commit()
+        rprint(f"[bold green]✓ {msg}[/bold green]")
+    else:
+        rprint(f"[bold red]✗ {msg}[/bold red]")
+
+
+def cmd_lookup(ip: str) -> None:
+    """Investigate an IP with reverse DNS, GeoIP, and local intelligence."""
+    db = Database()
+    resolver = IPResolver(db=db)
+    intel = ThreatIntel()
+    fw = Firewall()
+    monitor = NetworkMonitor()
+
+    with console.status(f"[bold cyan]Querying intelligence records for {ip}...[/bold cyan]"):
+        info = resolver.resolve(ip, fetch_geo=True)
+        ti_match = intel.check_ip(ip)
+        is_blocked = db.is_blocked(ip)
+        conns = [c for c in monitor.get_connections() if c.remote_ip == ip]
+
+    lines = [
+        f"[bold white]IP Address:[/bold white] {ip}",
+        f"[bold white]Reverse DNS (Hostname):[/bold white] {info.hostname or '[dim]None / Unresolved[/dim]'}",
+        f"[bold white]Location:[/bold white] {info.city or '-'}, {info.country_name or '-'} {info.badge}",
+        f"[bold white]ISP / Organization:[/bold white] {info.org or '-'}",
+        f"[bold white]ASN / Network:[/bold white] {info.asn or '-'}",
+    ]
+
+    if ti_match:
+        lines.append(
+            f"[bold red]Threat Intel: MATCH! {ti_match.get('category')} (Confidence: {ti_match.get('confidence')}%) [/bold red]"
+        )
+    else:
+        lines.append("[bold green]Threat Intel: No match in local malicious IP database[/bold green]")
+
+    fw_str = "[bold red]BLOCKED in firewall[/bold red]" if is_blocked else "[green]Not blocked[/green]"
+    lines.append(f"[bold white]Firewall Status:[/bold white] {fw_str}")
+
+    panel = Panel("\n".join(lines), title=f"🔍 IP Intelligence: {ip}", border_style="cyan")
+    console.print(panel)
+
+    if conns:
+        c_table = Table(title=f"Active Local Connections to {ip}", expand=True)
+        c_table.add_column("Proto", style="cyan")
+        c_table.add_column("State")
+        c_table.add_column("PID", style="magenta")
+        c_table.add_column("Process", style="bold white")
+        c_table.add_column("Local Port")
+        c_table.add_column("Remote Port")
+        for c in conns:
+            c_table.add_row(
+                c.protocol,
+                c.status,
+                str(c.pid or "-"),
+                c.process_name or "-",
+                str(c.local_port),
+                str(c.remote_port or "-"),
+            )
+        console.print(c_table)
+    else:
+        console.print("[dim]No active local sockets connected to this IP.[/dim]")
 
 
 def cmd_block(ip: str, reason: str) -> None:
@@ -485,6 +572,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     # uninstall-extension
     subparsers.add_parser("uninstall-extension", help="Uninstall the GNOME Shell top panel extension")
 
+    # kill
+    p_kill = subparsers.add_parser("kill", help="Terminate a running process by PID")
+    p_kill.add_argument("pid", type=int, help="Process ID (PID) to terminate")
+    p_kill.add_argument("-f", "--force", action="store_true", help="Send SIGKILL immediately")
+
+    # lookup
+    p_lookup = subparsers.add_parser("lookup", help="Look up OSINT, reverse DNS, and GeoIP intelligence for an IP")
+    p_lookup.add_argument("ip", help="IP address to investigate")
+
     # install-service
     subparsers.add_parser("install-service", help="Install and enable systemd background user service")
 
@@ -513,6 +609,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         cmd_block(args.ip, args.reason)
     elif args.command == "unblock":
         cmd_unblock(args.ip)
+    elif args.command == "kill":
+        cmd_kill(args.pid, force=args.force)
+    elif args.command == "lookup":
+        cmd_lookup(args.ip)
     elif args.command == "update-intel":
         cmd_update_intel()
     elif args.command == "install-extension":

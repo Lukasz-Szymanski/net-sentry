@@ -38,7 +38,10 @@ class Database:
                     remote_ip TEXT NOT NULL,
                     remote_port INTEGER,
                     details TEXT,
-                    blocked INTEGER DEFAULT 0
+                    blocked INTEGER DEFAULT 0,
+                    exe_path TEXT,
+                    file_hash TEXT,
+                    killed INTEGER DEFAULT 0
                 )
                 """
             )
@@ -52,11 +55,36 @@ class Database:
                 """
             )
             cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ip_info_cache (
+                    ip TEXT PRIMARY KEY,
+                    hostname TEXT,
+                    country_code TEXT,
+                    country_name TEXT,
+                    city TEXT,
+                    org TEXT,
+                    asn TEXT,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts (timestamp DESC)"
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_alerts_remote_ip ON alerts (remote_ip)"
             )
+
+            # Auto-migrate columns for existing databases
+            cursor.execute("PRAGMA table_info(alerts)")
+            existing_cols = {row["name"] for row in cursor.fetchall()}
+            if "exe_path" not in existing_cols:
+                cursor.execute("ALTER TABLE alerts ADD COLUMN exe_path TEXT")
+            if "file_hash" not in existing_cols:
+                cursor.execute("ALTER TABLE alerts ADD COLUMN file_hash TEXT")
+            if "killed" not in existing_cols:
+                cursor.execute("ALTER TABLE alerts ADD COLUMN killed INTEGER DEFAULT 0")
+
             conn.commit()
 
     def record_alert(
@@ -70,6 +98,9 @@ class Database:
         pid: Optional[int] = None,
         details: Optional[str] = None,
         blocked: bool = False,
+        exe_path: Optional[str] = None,
+        file_hash: Optional[str] = None,
+        killed: bool = False,
     ) -> int:
         timestamp = datetime.now(timezone.utc).isoformat()
         with self._get_connection() as conn:
@@ -78,8 +109,9 @@ class Database:
                 """
                 INSERT INTO alerts (
                     timestamp, severity, threat_type, score,
-                    process_name, pid, remote_ip, remote_port, details, blocked
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    process_name, pid, remote_ip, remote_port, details, blocked,
+                    exe_path, file_hash, killed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp,
@@ -92,10 +124,51 @@ class Database:
                     remote_port,
                     details,
                     1 if blocked else 0,
+                    exe_path,
+                    file_hash,
+                    1 if killed else 0,
                 ),
             )
             conn.commit()
             return cursor.lastrowid or 0
+
+    def mark_alert_killed(self, alert_id: int) -> bool:
+        """Mark an alert record as having had its process terminated."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE alerts SET killed = 1 WHERE id = ?", (alert_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def cache_ip_info(
+        self,
+        ip: str,
+        hostname: Optional[str] = None,
+        country_code: Optional[str] = None,
+        country_name: Optional[str] = None,
+        city: Optional[str] = None,
+        org: Optional[str] = None,
+        asn: Optional[str] = None,
+    ) -> None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO ip_info_cache (
+                    ip, hostname, country_code, country_name, city, org, asn, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ip, hostname, country_code, country_name, city, org, asn, timestamp),
+            )
+            conn.commit()
+
+    def get_cached_ip_info(self, ip: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM ip_info_cache WHERE ip = ?", (ip,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     def get_recent_alerts(
         self, limit: int = 50, severity: Optional[str] = None

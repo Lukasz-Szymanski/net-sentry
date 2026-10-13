@@ -122,6 +122,8 @@ Log out and log back in (Wayland) or press `Alt + F2` -> `r` (X11) to activate t
 | `netsentry alerts` | Display recent security events recorded in SQLite |
 | `netsentry block <IP>` | Add IP to blacklist and apply firewall DROP rule |
 | `netsentry unblock <IP>` | Remove firewall DROP rule for IP |
+| `netsentry kill <PID>` | Terminate a suspicious process by PID |
+| `netsentry lookup <IP>` | Look up OSINT, reverse DNS, and GeoIP intelligence for an IP |
 | `netsentry update-intel` | Download updated threat intelligence feeds |
 | `netsentry install-service` | Install and enable the background systemd user service |
 | `netsentry uninstall-service` | Stop and remove the systemd user service |
@@ -141,6 +143,7 @@ Configuration is automatically generated on first run at:
   "desktop_notifications": true,
   "notification_cooldown_seconds": 30,
   "auto_block_threats": false,
+  "auto_kill_threats": false,
   "threat_score_threshold": 60,
   "suspicious_ports": [23, 2323, 4444, 5555, 6667, 9001, 9050, 9051, 1337, 31337],
   "whitelist_ips": ["127.0.0.1", "::1", "0.0.0.0"],

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from netsentry.config import Config
+from netsentry.core.forensics import compute_file_hash
 from netsentry.core.threat_intel import ThreatIntel
 
 SUSPICIOUS_SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "csh", "tcsh"}
@@ -26,6 +27,7 @@ class ThreatEvent:
     process_name: Optional[str]
     pid: Optional[int]
     exe_path: Optional[str] = None
+    file_hash: Optional[str] = None
 
 
 class ThreatDetector:
@@ -114,6 +116,8 @@ class ThreatDetector:
             elif score >= 75:
                 severity = "HIGH"
 
+            file_hash = compute_file_hash(exe_path) if exe_path else None
+
             return ThreatEvent(
                 threat_found=True,
                 severity=severity,
@@ -126,6 +130,7 @@ class ThreatDetector:
                 process_name=process_name,
                 pid=pid,
                 exe_path=exe_path,
+                file_hash=file_hash,
             )
 
         return None
