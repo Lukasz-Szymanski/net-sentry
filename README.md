@@ -1,0 +1,153 @@
+# 🛡️ NetSentry
+
+[![CI](https://github.com/Lukasz-Szymanski/net-sentry/actions/workflows/ci.yml/badge.svg)](https://github.com/Lukasz-Szymanski/net-sentry/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Linux Daemon](https://img.shields.io/badge/platform-Linux-orange.svg)](https://kernel.org)
+
+**NetSentry** is a lightweight, real-time Linux network bodyguard and threat sentinel. Running silently in the background or interactively via an htop-style terminal dashboard (TUI), NetSentry correlates network sockets with Linux processes, flags suspicious outbound connections (reverse shells, untrusted `/tmp` binaries, known malicious botnets/C2 nodes), and dispatches desktop notifications or executes firewall countermeasures.
+
+---
+
+## ✨ Features
+
+- 🕵️ **Process-Network Correlation**: Maps every active socket to its PID, executable path, process name, and user.
+- 🚨 **Real-Time Threat Detection**:
+  - **Reverse Shell Detection**: Detects shells (`bash`, `zsh`, `sh`) or net tools (`nc`, `socat`) opening remote sockets.
+  - **Untrusted Path Execution**: Flags binaries running from temporary directories like `/tmp/`, `/dev/shm/`, or `/var/tmp/`.
+  - **Suspicious Port Alerts**: Identifies connections on backdoor ports (4444, 1337, 31337, 6667, etc.).
+  - **Threat Intelligence**: Built-in and downloadable IP reputation feeds (Tor exits, botnet C2s, scanner IPs).
+- 🖥️ **Live Terminal Dashboard (TUI)**: Beautiful `htop`-style live monitoring dashboard built with Rich.
+- 🔔 **Linux Desktop Notifications**: Native `notify-send` desktop popups with rate-limiting and urgency levels.
+- 🧱 **Firewall Integration**: One-click or automated IP dropping via `iptables` / `nftables` with loopback protection.
+- ⚙️ **Systemd Integration**: Ready-to-use user and system-level systemd service files.
+
+---
+
+## 🏗️ Architecture
+
+```
+                      ┌────────────────────────┐
+                      │ Linux Kernel / Sockets │
+                      └───────────┬────────────┘
+                                  │
+                                  ▼
+               ┌─────────────────────────────────────┐
+               │    Network Monitor (psutil/proc)    │
+               │  Maps sockets to PID & Binary Path  │
+               └──────────────────┬──────────────────┘
+                                  │
+                                  ▼
+               ┌─────────────────────────────────────┐
+               │         Threat Detector             │
+               ├──────────────────┬──────────────────┤
+               │ • Threat Intel   │ • Port Blacklist │
+               │ • Shell Sockets  │ • Untrusted Path │
+               └──────────────────┬──────────────────┘
+                                  │
+                  ┌───────────────┼───────────────┐
+                  ▼               ▼               ▼
+           ┌────────────┐  ┌─────────────┐  ┌────────────┐
+           │ Desktop UI │  │  SQLite DB  │  │  Firewall  │
+           │ (notify)   │  │  (sentry.db)│  │ (iptables) │
+           └────────────┘  └─────────────┘  └────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+
+```bash
+git clone https://github.com/Lukasz-Szymanski/net-sentry.git
+cd net-sentry
+
+# Create virtual environment and install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### 2. Launch Interactive TUI Dashboard
+
+```bash
+netsentry tui
+```
+
+### 3. Start Background Monitoring Daemon
+
+```bash
+# Start background daemon
+netsentry start
+
+# Check running status
+netsentry status
+
+# Stop daemon
+netsentry stop
+```
+
+---
+
+## 📖 CLI Commands
+
+| Command | Description |
+| :--- | :--- |
+| `netsentry tui` | Open the interactive real-time terminal dashboard |
+| `netsentry start` | Start the background monitoring daemon |
+| `netsentry start -f` | Run the monitoring daemon in foreground |
+| `netsentry stop` | Stop the running daemon |
+| `netsentry status` | Display daemon status, total alerts, and active connections |
+| `netsentry scan` | Run an instant socket scan and print security analysis table |
+| `netsentry alerts` | Display recent security events recorded in SQLite |
+| `netsentry block <IP>` | Add IP to blacklist and apply firewall DROP rule |
+| `netsentry unblock <IP>` | Remove firewall DROP rule for IP |
+| `netsentry update-intel` | Download updated threat intelligence feeds |
+
+---
+
+## ⚙️ Configuration
+
+Configuration is automatically generated on first run at:
+`~/.config/netsentry/config.json`
+
+```json
+{
+  "scan_interval_seconds": 2.0,
+  "desktop_notifications": true,
+  "notification_cooldown_seconds": 30,
+  "auto_block_threats": false,
+  "threat_score_threshold": 60,
+  "suspicious_ports": [23, 2323, 4444, 5555, 6667, 9001, 9050, 9051, 1337, 31337],
+  "whitelist_ips": ["127.0.0.1", "::1", "0.0.0.0"],
+  "whitelist_processes": ["systemd-resolved", "chronyd", "ntpd", "NetworkManager"]
+}
+```
+
+---
+
+## 🐧 Systemd Service (Autostart)
+
+To enable NetSentry as a systemd user service:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/netsentry.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now netsentry
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+pytest -v
+```
+
+---
+
+## 📜 License
+
+Released under the [MIT License](LICENSE).

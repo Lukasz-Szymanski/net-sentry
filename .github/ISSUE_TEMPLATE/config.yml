@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Security Questions & Discussions
+    url: https://github.com/Lukasz-Szymanski/net-sentry/discussions
+    about: Ask questions and discuss Linux network security ideas
