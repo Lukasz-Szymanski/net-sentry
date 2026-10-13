@@ -54,9 +54,19 @@ class BPFProbe:
         except ImportError:
             return None
 
+    @staticmethod
+    def _check_tracefs() -> bool:
+        for candidate in ("/sys/kernel/debug/tracing", "/sys/kernel/tracing"):
+            try:
+                if Path(candidate).is_dir():
+                    return True
+            except (PermissionError, OSError):
+                continue
+        return False
+
     def check_status(self) -> Dict[str, Any]:
         """Inspect and return readiness of eBPF kernel subsystem."""
-        tracefs = Path("/sys/kernel/debug/tracing").exists() or Path("/sys/kernel/tracing").exists()
+        tracefs = self._check_tracefs()
         kernel = platform.release()
         bcc_installed = self.bcc_module is not None
 

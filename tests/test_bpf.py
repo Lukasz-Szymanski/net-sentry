@@ -21,6 +21,14 @@ def test_bpf_status_reporting_fallback():
     assert "eBPF not available" in msg
 
 
+def test_bpf_permission_error_handling():
+    probe = BPFProbe()
+    with patch("pathlib.Path.is_dir", side_effect=PermissionError("Permission denied")):
+        status = probe.check_status()
+        assert status["tracefs_mounted"] is False
+        assert status["available"] is False
+
+
 def test_bpf_status_mocked_available():
     probe = BPFProbe()
     probe.is_linux = True
@@ -28,7 +36,7 @@ def test_bpf_status_mocked_available():
     mock_bcc = MagicMock()
     probe.bcc_module = mock_bcc
 
-    with patch("pathlib.Path.exists", return_value=True):
+    with patch.object(probe, "_check_tracefs", return_value=True):
         status = probe.check_status()
         assert status["available"] is True
         assert "Zero-latency" in status["status_description"]
