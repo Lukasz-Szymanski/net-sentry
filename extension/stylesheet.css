@@ -1,0 +1,34 @@
+.netsentry-icon {
+  icon-size: 16px;
+}
+
+.netsentry-status-active {
+  color: #33d17a;
+  font-weight: bold;
+}
+
+.netsentry-status-inactive {
+  color: #f6d32d;
+  font-weight: bold;
+}
+
+.netsentry-status-threat {
+  color: #e01b24;
+  font-weight: bold;
+}
+
+.netsentry-badge {
+  background-color: rgba(224, 27, 36, 0.9);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.netsentry-section-header {
+  font-weight: bold;
+  font-size: 11px;
+  color: #9a9996;
+}

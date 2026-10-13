@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 from rich import print as rprint
@@ -29,11 +32,28 @@ from netsentry.tui.dashboard import Dashboard
 console = Console()
 
 
-def cmd_status() -> None:
+def cmd_status(as_json: bool = False) -> None:
     pid = SentryDaemon.get_running_pid()
     db = Database()
     intel = ThreatIntel()
     stats = db.get_stats()
+
+    if as_json:
+        monitor = NetworkMonitor()
+        conns = monitor.get_established_connections()
+        recent = db.get_recent_alerts(limit=5)
+        payload = {
+            "version": __version__,
+            "running": pid is not None,
+            "pid": pid,
+            "threat_records": intel.get_count(),
+            "total_alerts": stats.get("total_alerts", 0),
+            "active_blocked_ips": stats.get("active_blocked_ips", 0),
+            "established_connections_count": len(conns),
+            "recent_alerts": recent,
+        }
+        print(json.dumps(payload, indent=2))
+        return
 
     table = Table(title="🛡️ NetSentry Status", box=None)
     table.add_column("Property", style="bold cyan")
@@ -243,6 +263,73 @@ def cmd_tui() -> None:
     dashboard.run()
 
 
+def cmd_install_extension() -> None:
+    """Install and enable the GNOME Shell extension."""
+    uuid = "netsentry@lukasz-szymanski.github.io"
+    gnome_ext_dir = Path.home() / ".local" / "share" / "gnome-shell" / "extensions" / uuid
+
+    # Find extension directory in project
+    project_dir = Path(__file__).resolve().parent.parent.parent
+    ext_source = project_dir / "extension"
+    if not ext_source.exists():
+        ext_source = Path.cwd() / "extension"
+
+    if not ext_source.exists():
+        rprint(f"[bold red]Extension source directory not found at {ext_source}[/bold red]")
+        return
+
+    gnome_ext_dir.mkdir(parents=True, exist_ok=True)
+    for item in ext_source.iterdir():
+        if item.is_file():
+            shutil.copy2(item, gnome_ext_dir / item.name)
+
+    rprint(f"[bold green]✓ Copied extension files to {gnome_ext_dir}[/bold green]")
+
+    # Symlink netsentry binary to ~/.local/bin/netsentry if not yet accessible
+    local_bin = Path.home() / ".local" / "bin"
+    local_bin.mkdir(parents=True, exist_ok=True)
+    target_link = local_bin / "netsentry"
+    current_bin = shutil.which("netsentry")
+    if not current_bin:
+        current_bin = str(Path(sys.executable).parent / "netsentry")
+
+    if current_bin and Path(current_bin).exists() and not target_link.exists():
+        try:
+            target_link.symlink_to(current_bin)
+            rprint(f"[bold green]✓ Symlinked {current_bin} -> {target_link}[/bold green]")
+        except Exception as e:
+            rprint(f"[yellow]Note on ~/.local/bin symlink: {e}[/yellow]")
+
+    # Enable via gnome-extensions CLI
+    gnome_ext = shutil.which("gnome-extensions")
+    if gnome_ext:
+        try:
+            subprocess.run([gnome_ext, "enable", uuid], check=False)
+            rprint(f"[bold green]✓ Enabled extension '{uuid}' via gnome-extensions.[/bold green]")
+        except Exception as e:
+            rprint(f"[yellow]Could not enable extension via CLI: {e}[/yellow]")
+
+    rprint("\n[bold cyan]🎉 NetSentry indicator installed successfully![/bold cyan]")
+    rprint("The shield icon will appear in the top panel.")
+    rprint("[dim]If not visible immediately:[/dim]")
+    rprint("  • Under Wayland: Log out and log back in, or restart session.")
+    rprint("  • Under X11: Press [bold]Alt + F2[/bold], enter [bold]r[/bold], and press Enter.")
+
+
+def cmd_uninstall_extension() -> None:
+    uuid = "netsentry@lukasz-szymanski.github.io"
+    gnome_ext = shutil.which("gnome-extensions")
+    if gnome_ext:
+        subprocess.run([gnome_ext, "disable", uuid], check=False)
+
+    gnome_ext_dir = Path.home() / ".local" / "share" / "gnome-shell" / "extensions" / uuid
+    if gnome_ext_dir.exists():
+        shutil.rmtree(gnome_ext_dir)
+        rprint(f"[bold green]✓ Uninstalled NetSentry extension from {gnome_ext_dir}[/bold green]")
+    else:
+        rprint("[yellow]Extension directory not found.[/yellow]")
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="netsentry",
@@ -262,7 +349,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     subparsers.add_parser("stop", help="Stop the running sentinel daemon")
 
     # status
-    subparsers.add_parser("status", help="Show sentinel daemon status and metrics")
+    p_status = subparsers.add_parser("status", help="Show sentinel daemon status and metrics")
+    p_status.add_argument("-j", "--json", action="store_true", help="Output status as JSON")
 
     # scan
     subparsers.add_parser("scan", help="Run a one-time network socket scan")
@@ -284,6 +372,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     # update-intel
     subparsers.add_parser("update-intel", help="Update threat intelligence feeds from web")
 
+    # install-extension
+    subparsers.add_parser("install-extension", help="Install and enable the GNOME Shell top panel extension")
+
+    # uninstall-extension
+    subparsers.add_parser("uninstall-extension", help="Uninstall the GNOME Shell top panel extension")
+
     args = parser.parse_args(argv)
 
     if not args.command:
@@ -297,7 +391,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     elif args.command == "stop":
         cmd_stop()
     elif args.command == "status":
-        cmd_status()
+        cmd_status(as_json=args.json)
     elif args.command == "scan":
         cmd_scan()
     elif args.command == "alerts":
@@ -308,6 +402,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         cmd_unblock(args.ip)
     elif args.command == "update-intel":
         cmd_update_intel()
+    elif args.command == "install-extension":
+        cmd_install_extension()
+    elif args.command == "uninstall-extension":
+        cmd_uninstall_extension()
 
 
 if __name__ == "__main__":

@@ -54,3 +54,5 @@ threat_intel_cache.json
 
 # OS
 .DS_Store
+*.zip
+*.shell-extension.zip

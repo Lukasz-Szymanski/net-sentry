@@ -84,9 +84,15 @@ netsentry start
 # Check running status
 netsentry status
 
-# Stop daemon
-netsentry stop
+### 4. Install GNOME Top Panel Indicator (Optional)
+
+To show the live shield status on the Linux top panel:
+
+```bash
+netsentry install-extension
 ```
+
+Log out and log back in (Wayland) or press `Alt + F2` -> `r` (X11) to activate the shield in your top bar.
 
 ---
 
@@ -99,11 +105,14 @@ netsentry stop
 | `netsentry start -f` | Run the monitoring daemon in foreground |
 | `netsentry stop` | Stop the running daemon |
 | `netsentry status` | Display daemon status, total alerts, and active connections |
+| `netsentry status --json` | Output system metrics and alerts in JSON format |
 | `netsentry scan` | Run an instant socket scan and print security analysis table |
 | `netsentry alerts` | Display recent security events recorded in SQLite |
 | `netsentry block <IP>` | Add IP to blacklist and apply firewall DROP rule |
 | `netsentry unblock <IP>` | Remove firewall DROP rule for IP |
 | `netsentry update-intel` | Download updated threat intelligence feeds |
+| `netsentry install-extension` | Install and enable the GNOME Shell top panel extension |
+| `netsentry uninstall-extension` | Remove the GNOME Shell extension |
 
 ---
 
