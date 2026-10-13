@@ -41,41 +41,41 @@ flowchart TD
 
 ---
 
-## 🎯 Phase 1: Core Security & Active Defense *(In Progress)*
+## 🎯 Phase 1: Core Security & Active Defense *(Completed)*
 
 Focuses on elevating threat detection and mitigation capabilities with rich metadata and immediate remediation:
 
-- **GeoIP & Reverse DNS Resolver (`netsentry.core.resolver`)**:
+- [x] **GeoIP & Reverse DNS Resolver (`netsentry.core.resolver`)**:
   - Non-blocking reverse DNS lookups with in-memory & SQLite cache.
   - GeoIP resolution (country code, country name, city, organization/ASN).
   - Integration into socket scanners, threat alerts, and connection analysis.
-- **Binary Forensics & File Hashing**:
+- [x] **Binary Forensics & File Hashing**:
   - Automatic calculation of SHA-256 checksums for binaries associated with suspicious sockets.
   - Storage of hashes in the alerts database for forensic tracing and VirusTotal cross-checking.
-- **Active Process Defense**:
+- [x] **Active Process Defense**:
   - CLI command: `netsentry kill <PID>` with graceful SIGTERM and fallback to SIGKILL.
   - Configuration toggle: `"auto_kill_threats": false` for automated termination of high-confidence threats.
   - Tracking of terminated processes in the SQLite alert logs (`killed` column).
-- **Threat Intelligence Lookup (`netsentry lookup <IP>`)**:
+- [x] **Threat Intelligence Lookup (`netsentry lookup <IP>`)**:
   - Instant OSINT lookup command for any IP address.
   - Displays hostname, GeoIP location, local firewall status, local active sockets, and threat database categorization.
 
 ---
 
-## 📢 Phase 2: External Notifications & Integrations
+## 📢 Phase 2: External Notifications & Integrations *(Completed)*
 
 Enables NetSentry to run effectively on headless servers and remote VPS instances:
 
-- **Telegram Bot Dispatcher**:
-  - Instant security alerts sent directly to private chats or incident response channels.
-- **Discord & Slack Webhooks**:
+- [x] **Telegram Bot Dispatcher**:
+  - Instant security alerts sent directly to private chats or incident response channels via Telegram Bot API.
+- [x] **Discord & Slack Webhooks**:
   - Formatted embeds with severity badges, process details, and remote IP indicators.
-- **CLI Testing Command**:
+- [x] **CLI Testing Command**:
   - `netsentry test-notify` to verify desktop notifications, Telegram, and webhooks in one go.
 
 ---
 
-## 🖥️ Phase 3: Interactive Terminal Dashboard (TUI)
+## 🖥️ Phase 3: Interactive Terminal Dashboard *(Next Up)*
 
 Transforms the monitoring view into a full interactive command center:
 

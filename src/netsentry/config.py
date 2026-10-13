@@ -17,6 +17,11 @@ class Config:
     auto_block_threats: bool = False
     auto_kill_threats: bool = False
     threat_score_threshold: int = 60
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    webhook_enabled: bool = False
+    webhook_url: str = ""
     suspicious_ports: List[int] = field(
         default_factory=lambda: [
             23,     # Telnet
@@ -93,7 +98,9 @@ def load_config() -> Config:
     try:
         with open(config_file, "r", encoding="utf-8") as f:
             data: dict[str, Any] = json.load(f)
-        return Config(**data)
+        valid_keys = set(Config.__dataclass_fields__.keys())
+        filtered = {k: v for k, v in data.items() if k in valid_keys}
+        return Config(**filtered)
     except Exception:
         # Fallback to defaults on corrupted file
         return Config()

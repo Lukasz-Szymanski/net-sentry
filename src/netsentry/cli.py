@@ -27,6 +27,7 @@ from netsentry.core.detector import ThreatDetector
 from netsentry.core.firewall import Firewall
 from netsentry.core.forensics import compute_file_hash, get_process_forensics
 from netsentry.core.monitor import NetworkMonitor
+from netsentry.core.notifier import Notifier
 from netsentry.core.resolver import IPResolver
 from netsentry.core.terminator import kill_process
 from netsentry.core.threat_intel import ThreatIntel
@@ -305,6 +306,32 @@ def cmd_lookup(ip: str) -> None:
         console.print("[dim]No active local sockets connected to this IP.[/dim]")
 
 
+def cmd_test_notify() -> None:
+    """Test all configured notification channels and report status."""
+    config = load_config()
+    notifier = Notifier(config=config)
+
+    console.print("[bold cyan]Testing NetSentry alert dispatchers...[/bold cyan]\n")
+    results = notifier.test_all()
+
+    table = Table(title="Notification Channels Status", expand=True)
+    table.add_column("Channel", style="bold white", width=14)
+    table.add_column("Status", width=12)
+    table.add_column("Details")
+
+    for channel, (success, msg) in results.items():
+        if success:
+            status_str = "[bold green]✓ SUCCESS[/bold green]"
+        elif "not configured" in msg:
+            status_str = "[dim]DISABLED[/dim]"
+        else:
+            status_str = "[bold red]✗ FAILED[/bold red]"
+
+        table.add_row(channel.capitalize(), status_str, msg)
+
+    console.print(table)
+
+
 def cmd_block(ip: str, reason: str) -> None:
     fw = Firewall()
     db = Database()
@@ -581,6 +608,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     p_lookup = subparsers.add_parser("lookup", help="Look up OSINT, reverse DNS, and GeoIP intelligence for an IP")
     p_lookup.add_argument("ip", help="IP address to investigate")
 
+    # test-notify
+    subparsers.add_parser("test-notify", help="Send a test notification to all configured channels")
+
     # install-service
     subparsers.add_parser("install-service", help="Install and enable systemd background user service")
 
@@ -613,6 +643,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         cmd_kill(args.pid, force=args.force)
     elif args.command == "lookup":
         cmd_lookup(args.ip)
+    elif args.command == "test-notify":
+        cmd_test_notify()
     elif args.command == "update-intel":
         cmd_update_intel()
     elif args.command == "install-extension":

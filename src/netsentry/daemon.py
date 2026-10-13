@@ -32,7 +32,7 @@ class SentryDaemon:
         self.threat_intel = ThreatIntel()
         self.detector = ThreatDetector(self.config, self.threat_intel)
         self.monitor = NetworkMonitor()
-        self.notifier = Notifier(self.config.notification_cooldown_seconds)
+        self.notifier = Notifier(config=self.config)
         self.firewall = Firewall()
 
         self._running = False
@@ -126,8 +126,12 @@ class SentryDaemon:
                     killed=killed,
                 )
 
-                # Send Desktop Notification
-                if self.config.desktop_notifications:
+                # Send Multi-Channel Notification (Desktop, Telegram, Webhook)
+                if (
+                    self.config.desktop_notifications
+                    or self.config.telegram_enabled
+                    or self.config.webhook_enabled
+                ):
                     title = f"🚨 NetSentry Alert [{threat.severity}]"
                     action_notes = []
                     if blocked:
