@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.resources
 import json
 import os
 import shutil
@@ -263,19 +264,36 @@ def cmd_tui() -> None:
     dashboard.run()
 
 
+def _find_data_dir(subpath: str) -> Optional[Path]:
+    """Locate packaged data directory or fallback to project root."""
+    try:
+        bundled = importlib.resources.files("netsentry").joinpath("data", subpath)
+        bundled_path = Path(str(bundled))
+        if bundled_path.is_dir():
+            return bundled_path
+    except Exception:
+        pass
+
+    project_dir = Path(__file__).resolve().parent.parent.parent
+    candidate = project_dir / subpath
+    if candidate.is_dir():
+        return candidate
+
+    cwd_candidate = Path.cwd() / subpath
+    if cwd_candidate.is_dir():
+        return cwd_candidate
+
+    return None
+
+
 def cmd_install_extension() -> None:
     """Install and enable the GNOME Shell extension."""
     uuid = "netsentry@lukasz-szymanski.github.io"
     gnome_ext_dir = Path.home() / ".local" / "share" / "gnome-shell" / "extensions" / uuid
 
-    # Find extension directory in project
-    project_dir = Path(__file__).resolve().parent.parent.parent
-    ext_source = project_dir / "extension"
-    if not ext_source.exists():
-        ext_source = Path.cwd() / "extension"
-
-    if not ext_source.exists():
-        rprint(f"[bold red]Extension source directory not found at {ext_source}[/bold red]")
+    ext_source = _find_data_dir("extension")
+    if not ext_source or not ext_source.exists():
+        rprint("[bold red]Extension source files not found in package.[/bold red]")
         return
 
     gnome_ext_dir.mkdir(parents=True, exist_ok=True)
@@ -330,6 +348,95 @@ def cmd_uninstall_extension() -> None:
         rprint("[yellow]Extension directory not found.[/yellow]")
 
 
+def cmd_install_service() -> None:
+    """Install and enable NetSentry as a systemd user service."""
+    sysd_source = _find_data_dir("systemd")
+    service_src = sysd_source / "netsentry.service" if sysd_source else None
+
+    user_systemd_dir = Path.home() / ".config" / "systemd" / "user"
+    user_systemd_dir.mkdir(parents=True, exist_ok=True)
+    service_dest = user_systemd_dir / "netsentry.service"
+
+    # Find the best binary path for netsentry
+    netsentry_bin = shutil.which("netsentry")
+    if not netsentry_bin:
+        cand = Path(sys.executable).parent / "netsentry"
+        if cand.exists():
+            netsentry_bin = str(cand)
+    if not netsentry_bin:
+        local_cand = Path.home() / ".local" / "bin" / "netsentry"
+        if local_cand.exists():
+            netsentry_bin = str(local_cand)
+        else:
+            netsentry_bin = "/usr/local/bin/netsentry"
+
+    if service_src and service_src.is_file():
+        raw_text = service_src.read_text(encoding="utf-8")
+        lines = []
+        for line in raw_text.splitlines():
+            if line.startswith("ExecStart="):
+                lines.append(f"ExecStart={netsentry_bin} start --foreground")
+            else:
+                lines.append(line)
+        content = "\n".join(lines) + "\n"
+    else:
+        content = f"""[Unit]
+Description=NetSentry - Linux Network Sentinel and Threat Monitoring Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={netsentry_bin} start --foreground
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=false
+
+[Install]
+WantedBy=default.target
+"""
+
+    service_dest.write_text(content, encoding="utf-8")
+    rprint(f"[bold green]✓ Installed systemd service unit to {service_dest}[/bold green]")
+
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        try:
+            subprocess.run([systemctl, "--user", "daemon-reload"], check=True)
+            subprocess.run([systemctl, "--user", "enable", "--now", "netsentry"], check=True)
+            rprint("[bold green]✓ Reloaded systemd daemon and enabled/started 'netsentry' user service.[/bold green]")
+            rprint("[dim]Check status anytime with: [bold]systemctl --user status netsentry[/bold][/dim]")
+        except Exception as e:
+            rprint(f"[yellow]Could not automatically start service via systemctl: {e}[/yellow]")
+            rprint("You can start it manually with: [bold]systemctl --user enable --now netsentry[/bold]")
+    else:
+        rprint("[yellow]systemctl not found in PATH; please enable the service manually.[/yellow]")
+
+
+def cmd_uninstall_service() -> None:
+    """Stop, disable, and remove the systemd user service."""
+    systemctl = shutil.which("systemctl")
+    if systemctl:
+        subprocess.run([systemctl, "--user", "stop", "netsentry"], check=False)
+        subprocess.run([systemctl, "--user", "disable", "netsentry"], check=False)
+
+    service_dest = Path.home() / ".config" / "systemd" / "user" / "netsentry.service"
+    if service_dest.exists():
+        service_dest.unlink()
+        rprint(f"[bold green]✓ Removed {service_dest}[/bold green]")
+    else:
+        rprint("[yellow]Systemd user service file not found.[/yellow]")
+
+    if systemctl:
+        subprocess.run([systemctl, "--user", "daemon-reload"], check=False)
+        rprint("[bold green]✓ Reloaded systemd daemon.[/bold green]")
+
+
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="netsentry",
@@ -378,6 +485,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     # uninstall-extension
     subparsers.add_parser("uninstall-extension", help="Uninstall the GNOME Shell top panel extension")
 
+    # install-service
+    subparsers.add_parser("install-service", help="Install and enable systemd background user service")
+
+    # uninstall-service
+    subparsers.add_parser("uninstall-service", help="Uninstall and stop systemd background user service")
+
     args = parser.parse_args(argv)
 
     if not args.command:
@@ -406,6 +519,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         cmd_install_extension()
     elif args.command == "uninstall-extension":
         cmd_uninstall_extension()
+    elif args.command == "install-service":
+        cmd_install_service()
+    elif args.command == "uninstall-service":
+        cmd_uninstall_service()
 
 
 if __name__ == "__main__":

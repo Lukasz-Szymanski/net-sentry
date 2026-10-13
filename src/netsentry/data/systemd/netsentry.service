@@ -1,0 +1,20 @@
+[Unit]
+Description=NetSentry - Linux Network Sentinel and Threat Monitoring Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/netsentry start --foreground
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security Sandboxing options
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=false
+
+[Install]
+WantedBy=default.target

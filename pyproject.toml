@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A lightweight Linux network sentinel and threat monitoring daemon"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
     { name = "Lukasz Szymanski" }
 ]
@@ -18,7 +18,6 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: System Administrators",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -38,13 +37,24 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "build>=1.0.0",
+    "twine>=5.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Lukasz-Szymanski/net-sentry"
+Documentation = "https://github.com/Lukasz-Szymanski/net-sentry#readme"
+Repository = "https://github.com/Lukasz-Szymanski/net-sentry.git"
+Issues = "https://github.com/Lukasz-Szymanski/net-sentry/issues"
 
 [project.scripts]
 netsentry = "netsentry.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+netsentry = ["data/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,15 @@
+{
+  "name": "NetSentry Indicator",
+  "description": "Real-time Linux network bodyguard & threat monitor in the top panel. Shows active sockets, threat status, and daemon controls.",
+  "uuid": "netsentry@lukasz-szymanski.github.io",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "url": "https://github.com/Lukasz-Szymanski/net-sentry",
+  "version": 1
+}

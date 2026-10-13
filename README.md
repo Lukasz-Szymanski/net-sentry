@@ -1,6 +1,7 @@
 # 🛡️ NetSentry
 
 [![CI](https://github.com/Lukasz-Szymanski/net-sentry/actions/workflows/ci.yml/badge.svg)](https://github.com/Lukasz-Szymanski/net-sentry/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/net-sentry.svg)](https://pypi.org/project/net-sentry/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Linux Daemon](https://img.shields.io/badge/platform-Linux-orange.svg)](https://kernel.org)
@@ -20,7 +21,7 @@
 - 🖥️ **Live Terminal Dashboard (TUI)**: Beautiful `htop`-style live monitoring dashboard built with Rich.
 - 🔔 **Linux Desktop Notifications**: Native `notify-send` desktop popups with rate-limiting and urgency levels.
 - 🧱 **Firewall Integration**: One-click or automated IP dropping via `iptables` / `nftables` with loopback protection.
-- ⚙️ **Systemd Integration**: Ready-to-use user and system-level systemd service files.
+- ⚙️ **Systemd Integration**: Single-command user service setup (`netsentry install-service`).
 
 ---
 
@@ -59,14 +60,24 @@
 
 ### 1. Installation
 
+#### Via `pipx` (Recommended on Linux)
+```bash
+pipx install net-sentry
+```
+
+#### Via `pip`
+```bash
+pip install net-sentry
+```
+
+#### From source (for development)
 ```bash
 git clone https://github.com/Lukasz-Szymanski/net-sentry.git
 cd net-sentry
 
-# Create virtual environment and install
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ### 2. Launch Interactive TUI Dashboard
@@ -83,6 +94,7 @@ netsentry start
 
 # Check running status
 netsentry status
+```
 
 ### 4. Install GNOME Top Panel Indicator (Optional)
 
@@ -111,6 +123,8 @@ Log out and log back in (Wayland) or press `Alt + F2` -> `r` (X11) to activate t
 | `netsentry block <IP>` | Add IP to blacklist and apply firewall DROP rule |
 | `netsentry unblock <IP>` | Remove firewall DROP rule for IP |
 | `netsentry update-intel` | Download updated threat intelligence feeds |
+| `netsentry install-service` | Install and enable the background systemd user service |
+| `netsentry uninstall-service` | Stop and remove the systemd user service |
 | `netsentry install-extension` | Install and enable the GNOME Shell top panel extension |
 | `netsentry uninstall-extension` | Remove the GNOME Shell extension |
 
@@ -138,13 +152,16 @@ Configuration is automatically generated on first run at:
 
 ## 🐧 Systemd Service (Autostart)
 
-To enable NetSentry as a systemd user service:
+To enable NetSentry as a systemd user service with a single command:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cp systemd/netsentry.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now netsentry
+netsentry install-service
+```
+
+To stop and remove the service:
+
+```bash
+netsentry uninstall-service
 ```
 
 ---
