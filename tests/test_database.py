@@ -71,3 +71,24 @@ def test_database_crud():
         assert cached is not None
         assert cached["hostname"] == "bad.c2.net"
         assert cached["country_code"] == "RU"
+
+        # 7. Temporary bans & scheduler
+        db.add_blocked_ip("192.0.2.1", reason="Temporary ban", duration_minutes=30)
+        assert db.is_blocked("192.0.2.1") is True
+        blocked_entries = db.get_blocked_ips()
+        ip_entry = next(e for e in blocked_entries if e["ip"] == "192.0.2.1")
+        assert ip_entry["expires_at"] is not None
+
+        # Expired check: not expired yet
+        expired = db.get_expired_blocked_ips()
+        assert not any(e["ip"] == "192.0.2.1" for e in expired)
+
+        # Force expiration in DB
+        with db._get_connection() as conn:
+            conn.cursor().execute(
+                "UPDATE blocked_ips SET expires_at = '2000-01-01T00:00:00' WHERE ip = '192.0.2.1'"
+            )
+            conn.commit()
+
+        expired = db.get_expired_blocked_ips()
+        assert any(e["ip"] == "192.0.2.1" for e in expired)

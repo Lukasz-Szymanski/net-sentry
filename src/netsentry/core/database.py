@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -50,7 +50,8 @@ class Database:
                 CREATE TABLE IF NOT EXISTS blocked_ips (
                     ip TEXT PRIMARY KEY,
                     reason TEXT,
-                    timestamp TEXT NOT NULL
+                    timestamp TEXT NOT NULL,
+                    expires_at TEXT
                 )
                 """
             )
@@ -84,6 +85,11 @@ class Database:
                 cursor.execute("ALTER TABLE alerts ADD COLUMN file_hash TEXT")
             if "killed" not in existing_cols:
                 cursor.execute("ALTER TABLE alerts ADD COLUMN killed INTEGER DEFAULT 0")
+
+            cursor.execute("PRAGMA table_info(blocked_ips)")
+            existing_blocked_cols = {row["name"] for row in cursor.fetchall()}
+            if "expires_at" not in existing_blocked_cols:
+                cursor.execute("ALTER TABLE blocked_ips ADD COLUMN expires_at TEXT")
 
             conn.commit()
 
@@ -191,18 +197,39 @@ class Database:
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
-    def add_blocked_ip(self, ip: str, reason: str = "Manually blocked") -> None:
-        timestamp = datetime.now(timezone.utc).isoformat()
+    def add_blocked_ip(
+        self,
+        ip: str,
+        reason: str = "Manually blocked",
+        duration_minutes: Optional[int] = None,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        timestamp = now.isoformat()
+        expires_at = None
+        if duration_minutes is not None and duration_minutes > 0:
+            expires_at = (now + timedelta(minutes=duration_minutes)).isoformat()
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO blocked_ips (ip, reason, timestamp)
-                VALUES (?, ?, ?)
+                INSERT OR REPLACE INTO blocked_ips (ip, reason, timestamp, expires_at)
+                VALUES (?, ?, ?, ?)
                 """,
-                (ip, reason, timestamp),
+                (ip, reason, timestamp, expires_at),
             )
             conn.commit()
+
+    def get_expired_blocked_ips(self) -> List[Dict[str, Any]]:
+        """Return list of blocked IP entries whose expiration timestamp has passed."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM blocked_ips WHERE expires_at IS NOT NULL AND expires_at <= ?",
+                (now_iso,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def remove_blocked_ip(self, ip: str) -> bool:
         with self._get_connection() as conn:

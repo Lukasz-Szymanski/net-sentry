@@ -91,15 +91,24 @@ Transforms the monitoring view into a full interactive command center:
 
 ---
 
-## 🧱 Phase 4: Advanced Engine & Next-Gen Networking *(Next Up)*
+## 🧱 Phase 4: Advanced Engine & Next-Gen Networking *(Completed)*
 
-Deepens kernel integration and network control:
+Deepens kernel integration, firewall control, and anomaly detection:
 
-- **Firewall Enhancements**:
-  - Native `nftables` support alongside `iptables`.
-  - Automatic unblock expiration timer (e.g. temporary 1h / 24h quarantine).
-- **Traffic Exfiltration Anomaly Engine**:
-  - Per-process bandwidth metering (`KB/s`, `MB/s`).
-  - Alert when unexpected processes stream large amounts of outbound data.
-- **eBPF Kernel Probes**:
-  - Zero-overhead kernel event tracing on socket transitions (`sock:inet_sock_set_state`).
+- [x] **Firewall Enhancements (`netsentry.core.firewall`)**:
+  - Native multi-backend engine supporting `nftables`, `ufw`, and `iptables` with auto-detection.
+  - Clean `inet netsentry` table and `@blocklist_v4` / `@blocklist_v6` sets for high performance and isolated management.
+  - Full IPv6 support and safety guards against blocking loopback/multicast addresses.
+- [x] **Auto-unblock Scheduler & Temporary Bans**:
+  - Temporary quarantine timer via `netsentry block <IP> -d <minutes>` (or `-r <reason>`).
+  - Automated expiration evaluator in daemon monitoring loop that safely releases expired blocks.
+  - CLI command `netsentry blocked` displaying active blocks, reasons, and remaining quarantine time.
+- [x] **Traffic Exfiltration Anomaly Engine (`netsentry.core.traffic`)**:
+  - Real-time per-process outbound bandwidth tracking (`KB/s`) and cumulative transfer volume (`MB`).
+  - Configurable rate and volume thresholds (`exfiltration_rate_threshold_kb_s`, `exfiltration_total_threshold_mb`).
+  - Autonomous alerting, threat event generation, and optional auto-quarantine for exfiltrating processes.
+  - CLI command `netsentry traffic` for live process network bandwidth metering.
+- [x] **eBPF Kernel Probes & Diagnostic Subsystem (`netsentry.core.bpf`)**:
+  - Kernel event tracing probe for socket transitions (`tcp_v4_connect`).
+  - Graceful fallback to high-resolution socket polling when unprivileged or BCC library is not installed.
+  - CLI command `netsentry bpf-status` for inspecting kernel tracing readiness and installation guidance.

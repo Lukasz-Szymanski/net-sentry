@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -22,6 +22,7 @@ from rich.table import Table
 
 from netsentry import __version__
 from netsentry.config import get_config_path, get_data_dir, load_config
+from netsentry.core.bpf import BPFProbe
 from netsentry.core.database import Database
 from netsentry.core.detector import ThreatDetector
 from netsentry.core.firewall import Firewall
@@ -31,6 +32,7 @@ from netsentry.core.notifier import Notifier
 from netsentry.core.resolver import IPResolver
 from netsentry.core.terminator import kill_process
 from netsentry.core.threat_intel import ThreatIntel
+from netsentry.core.traffic import TrafficMonitor
 from netsentry.daemon import SentryDaemon
 from netsentry.tui.dashboard import Dashboard
 
@@ -41,7 +43,13 @@ def cmd_status(as_json: bool = False) -> None:
     pid = SentryDaemon.get_running_pid()
     db = Database()
     intel = ThreatIntel()
+    fw = Firewall()
+    bpf = BPFProbe()
     stats = db.get_stats()
+    bpf_info = bpf.check_status()
+
+    blocked_entries = db.get_blocked_ips()
+    temp_bans_count = sum(1 for b in blocked_entries if b.get("expires_at"))
 
     if as_json:
         monitor = NetworkMonitor()
@@ -51,9 +59,12 @@ def cmd_status(as_json: bool = False) -> None:
             "version": __version__,
             "running": pid is not None,
             "pid": pid,
+            "firewall_backend": fw.get_backend(),
+            "bpf_status": bpf_info["status_description"],
             "threat_records": intel.get_count(),
             "total_alerts": stats.get("total_alerts", 0),
             "active_blocked_ips": stats.get("active_blocked_ips", 0),
+            "temporary_bans_count": temp_bans_count,
             "established_connections_count": len(conns),
             "recent_alerts": recent,
         }
@@ -70,9 +81,16 @@ def cmd_status(as_json: bool = False) -> None:
     else:
         table.add_row("Daemon Status", "[bold yellow]Stopped[/bold yellow]")
 
+    table.add_row("Firewall Backend", f"[bold green]{fw.get_backend()}[/bold green]")
+    table.add_row("eBPF Kernel Engine", bpf_info["status_description"])
     table.add_row("Threat Intel Records", str(intel.get_count()))
     table.add_row("Total Recorded Alerts", str(stats.get("total_alerts", 0)))
-    table.add_row("Active Blocked IPs", str(stats.get("active_blocked_ips", 0)))
+    table.add_row(
+        "Active Blocked IPs",
+        f"{stats.get('active_blocked_ips', 0)} ([yellow]{temp_bans_count} temporary quarantine[/yellow])"
+        if temp_bans_count
+        else str(stats.get("active_blocked_ips", 0)),
+    )
     table.add_row("Config File", str(get_config_path()))
     table.add_row("Data Directory", str(get_data_dir()))
 
@@ -332,22 +350,184 @@ def cmd_test_notify() -> None:
     console.print(table)
 
 
-def cmd_block(ip: str, reason: str) -> None:
-    fw = Firewall()
+def cmd_block(ip: str, reason: str, duration: Optional[int] = None) -> None:
+    config = load_config()
+    fw = Firewall(backend=config.firewall_backend)
     db = Database()
     ti = ThreatIntel()
 
     success, msg = fw.block_ip(ip)
     if success:
-        db.add_blocked_ip(ip, reason)
+        db.add_blocked_ip(ip, reason=reason, duration_minutes=duration)
         ti.add_bad_ip(ip, category="Manual Block")
-        rprint(f"[bold green]✓ {msg}[/bold green]")
+        dur_msg = f" (quarantine for {duration}m)" if duration else " (permanent)"
+        rprint(f"[bold green]✓ {msg}{dur_msg}[/bold green]")
     else:
         rprint(f"[bold red]✗ {msg}[/bold red]")
 
 
+def cmd_blocked() -> None:
+    """Display list of currently blocked IP addresses and expiration status."""
+    db = Database()
+    blocked = db.get_blocked_ips()
+
+    if not blocked:
+        rprint("[green]No IPs are currently blocked in the firewall.[/green]")
+        return
+
+    table = Table(title="🛡️ Blocked IP Addresses & Quarantine List", expand=True)
+    table.add_column("IP Address", style="bold yellow", width=18)
+    table.add_column("Reason", style="white", width=25)
+    table.add_column("Blocked At", style="dim", width=20)
+    table.add_column("Expiration Status", justify="center")
+
+    now = datetime.now(timezone.utc)
+    for b in blocked:
+        ip = b["ip"]
+        reason = b.get("reason") or "Manual"
+        ts = (b.get("timestamp") or "")[:19]
+        exp_str = b.get("expires_at")
+        if exp_str:
+            try:
+                exp_dt = datetime.fromisoformat(exp_str)
+                delta = (exp_dt - now).total_seconds()
+                if delta <= 0:
+                    status = "[bold red]EXPIRED (Pending unblock)[/bold red]"
+                elif delta < 3600:
+                    mins = max(1, int(delta // 60))
+                    status = f"[bold yellow]Quarantine ({mins}m left)[/bold yellow]"
+                else:
+                    hours = delta / 3600.0
+                    status = f"[bold yellow]Quarantine ({hours:.1f}h left)[/bold yellow]"
+            except Exception:
+                status = exp_str[:19]
+        else:
+            status = "[bold cyan]Permanent[/bold cyan]"
+
+        table.add_row(ip, reason, ts, status)
+
+    console.print(table)
+
+
+def cmd_traffic() -> None:
+    """Display bandwidth and network traffic activity per process."""
+    config = load_config()
+    monitor = NetworkMonitor()
+    traffic_monitor = TrafficMonitor(config=config)
+
+    conns = monitor.get_established_connections()
+
+    # Initial sample
+    for c in conns:
+        if c.pid and c.remote_ip:
+            traffic_monitor.sample_process(
+                pid=c.pid,
+                remote_ip=c.remote_ip,
+                remote_port=c.remote_port,
+                process_name=c.process_name,
+            )
+
+    time.sleep(0.3)
+
+    # Second sample to compute rate
+    proc_rates = []
+    for c in conns:
+        if c.pid and c.remote_ip:
+            rate_kb, cum_mb, anomaly = traffic_monitor.sample_process(
+                pid=c.pid,
+                remote_ip=c.remote_ip,
+                remote_port=c.remote_port,
+                process_name=c.process_name,
+            )
+            proc_rates.append({
+                "pid": c.pid,
+                "process_name": c.process_name or "-",
+                "remote_ip": c.remote_ip,
+                "remote_port": c.remote_port or 0,
+                "rate_kb_s": rate_kb,
+                "cum_mb": cum_mb,
+                "anomaly": anomaly is not None,
+            })
+
+    sys_totals = TrafficMonitor.get_system_totals()
+    totals_panel = Panel(
+        f"[bold white]Total Network Transfer:[/bold white] Outbound: [cyan]{sys_totals['mb_sent']} MB[/cyan] ({sys_totals['packets_sent']} pkts) | "
+        f"Inbound: [green]{sys_totals['mb_recv']} MB[/green] ({sys_totals['packets_recv']} pkts)",
+        title="🌐 Interface Throughput",
+        border_style="cyan",
+    )
+    console.print(totals_panel)
+
+    table = Table(title="Top Network Process Bandwidth & Exfiltration Meter", expand=True)
+    table.add_column("PID", style="magenta", width=8)
+    table.add_column("Process", style="bold white", width=18)
+    table.add_column("Remote Endpoint", style="yellow", width=22)
+    table.add_column("Upload Rate", justify="right", width=14)
+    table.add_column("Cumulative", justify="right", width=14)
+    table.add_column("Exfiltration Status", justify="center")
+
+    if not proc_rates:
+        console.print("[dim]No active network sockets with process I/O detected.[/dim]")
+        return
+
+    proc_rates.sort(key=lambda x: x["rate_kb_s"], reverse=True)
+    for p in proc_rates:
+        rate_str = f"{p['rate_kb_s']:.1f} KB/s"
+        cum_str = f"{p['cum_mb']:.2f} MB"
+        anomaly_str = "[bold red]⚠️ ANOMALY[/bold red]" if p["anomaly"] else "[green]NORMAL[/green]"
+        table.add_row(
+            str(p["pid"]),
+            p["process_name"],
+            f"{p['remote_ip']}:{p['remote_port']}",
+            rate_str,
+            cum_str,
+            anomaly_str,
+        )
+
+    console.print(table)
+
+
+def cmd_bpf_status() -> None:
+    """Inspect and display status of eBPF kernel tracing subsystem."""
+    probe = BPFProbe()
+    status = probe.check_status()
+
+    table = Table(title="⚡ eBPF Kernel Tracing Readiness", box=None)
+    table.add_column("Subsystem Check", style="bold cyan")
+    table.add_column("Status")
+
+    table.add_row("Kernel Version", status["kernel_version"])
+    table.add_row(
+        "Privileges (Root/SUDO)",
+        "[bold green]Yes (root)[/bold green]" if status["is_root"] else "[bold yellow]No (unprivileged)[/bold yellow]",
+    )
+    table.add_row(
+        "Python BCC Library",
+        "[bold green]Installed[/bold green]" if status["bcc_installed"] else "[bold red]Not Installed[/bold red]",
+    )
+    table.add_row(
+        "Kernel Tracefs Mounted",
+        "[bold green]Yes[/bold green]" if status["tracefs_mounted"] else "[bold red]No[/bold red]",
+    )
+    table.add_row(
+        "Engine Operation Mode",
+        f"[bold green]{status['status_description']}[/bold green]" if status["available"] else f"[bold yellow]{status['status_description']}[/bold yellow]",
+    )
+
+    console.print(table)
+
+    if status.get("recommendation"):
+        panel = Panel(
+            status["recommendation"],
+            title="💡 Recommended Setup Steps",
+            border_style="yellow",
+        )
+        console.print(panel)
+
+
 def cmd_unblock(ip: str) -> None:
-    fw = Firewall()
+    config = load_config()
+    fw = Firewall(backend=config.firewall_backend)
     db = Database()
 
     success, msg = fw.unblock_ip(ip)
@@ -585,10 +765,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     p_block = subparsers.add_parser("block", help="Block an IP address in the firewall")
     p_block.add_argument("ip", help="IP address to block")
     p_block.add_argument("-r", "--reason", default="Manual block via CLI", help="Reason for blocking")
+    p_block.add_argument("-d", "--duration", type=int, default=None, help="Quarantine duration in minutes (auto-unblock)")
+
+    # blocked
+    subparsers.add_parser("blocked", help="List currently blocked IPs and quarantine expiration status")
 
     # unblock
     p_unblock = subparsers.add_parser("unblock", help="Unblock an IP address")
     p_unblock.add_argument("ip", help="IP address to unblock")
+
+    # traffic
+    subparsers.add_parser("traffic", help="Display process bandwidth consumption and data exfiltration metrics")
+
+    # bpf-status
+    subparsers.add_parser("bpf-status", help="Inspect eBPF kernel tracing readiness and diagnostics")
 
     # update-intel
     subparsers.add_parser("update-intel", help="Update threat intelligence feeds from web")
@@ -636,9 +826,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     elif args.command == "alerts":
         cmd_alerts(limit=args.limit, severity=args.severity)
     elif args.command == "block":
-        cmd_block(args.ip, args.reason)
+        cmd_block(args.ip, args.reason, duration=args.duration)
+    elif args.command == "blocked":
+        cmd_blocked()
     elif args.command == "unblock":
         cmd_unblock(args.ip)
+    elif args.command == "traffic":
+        cmd_traffic()
+    elif args.command == "bpf-status":
+        cmd_bpf_status()
     elif args.command == "kill":
         cmd_kill(args.pid, force=args.force)
     elif args.command == "lookup":

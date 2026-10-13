@@ -22,6 +22,11 @@ class Config:
     telegram_chat_id: str = ""
     webhook_enabled: bool = False
     webhook_url: str = ""
+    firewall_backend: str = "auto"
+    auto_block_duration_minutes: int = 60
+    exfiltration_detection_enabled: bool = True
+    exfiltration_rate_threshold_kb_s: float = 2048.0
+    exfiltration_total_threshold_mb: float = 100.0
     suspicious_ports: List[int] = field(
         default_factory=lambda: [
             23,     # Telnet
