@@ -1,13 +1,11 @@
-# Contributing to NetSentry 🛡️
+# Contributing to NetSentry
 
-Thank you for your interest in contributing to **NetSentry**! NetSentry is an open-source network sentinel and threat monitor for Linux.
-
----
+Thank you for your interest in contributing to **NetSentry**.
 
 ## Getting Started
 
-1. **Fork** the repository on GitHub.
-2. **Clone** your fork locally:
+1. Fork the repository on GitHub.
+2. Clone your fork locally:
    ```bash
    git clone https://github.com/Lukasz-Szymanski/net-sentry.git
    cd net-sentry
@@ -23,29 +21,14 @@ Thank you for your interest in contributing to **NetSentry**! NetSentry is an op
    pytest -v
    ```
 
----
-
 ## Development Workflow
 
-1. Create a descriptive feature branch:
-   ```bash
-   git checkout -b feature/threat-rule-dns
-   ```
-2. Make your improvements or fixes.
-3. Ensure all tests pass:
-   ```bash
-   pytest -v
-   ```
-4. Commit your changes following **Conventional Commits**:
-   - `feat:` new feature or rule
-   - `fix:` bug fix
-   - `docs:` documentation updates
-   - `test:` test improvements
-   - `refactor:` code refactoring
-5. Push to your fork and submit a Pull Request.
-
----
+1. Create a feature branch (`git checkout -b feat/your-feature`).
+2. Make your changes and add tests where applicable.
+3. Verify that all tests pass (`pytest -v`).
+4. Commit using Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`).
+5. Push to your fork and open a Pull Request.
 
 ## Security Vulnerability Reporting
 
-If you discover a security vulnerability within NetSentry itself, please report it privately by opening a Security Advisory or contacting the maintainers directly rather than opening a public issue.
+If you discover a security vulnerability in NetSentry, please report it privately via GitHub Security Advisories rather than opening a public issue.
