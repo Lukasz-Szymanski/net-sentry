@@ -6,7 +6,7 @@ import logging
 import os
 import signal
 import time
-from typing import Optional, Tuple
+from typing import Tuple
 
 import psutil
 

@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import time
+
 from netsentry.core.terminator import kill_process
 
 

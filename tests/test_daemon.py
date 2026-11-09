@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from netsentry.config import Config
 from netsentry.core.monitor import ConnectionInfo

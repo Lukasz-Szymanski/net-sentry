@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 from netsentry.core.forensics import compute_file_hash, get_process_forensics
 
 

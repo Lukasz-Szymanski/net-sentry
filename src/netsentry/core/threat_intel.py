@@ -5,9 +5,9 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
 import urllib.request
+from pathlib import Path
+from typing import Any, Dict, Optional, Set
 
 from netsentry.config import get_data_dir
 

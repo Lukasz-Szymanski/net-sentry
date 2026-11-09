@@ -2,7 +2,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from netsentry.config import Config
-from netsentry.core.traffic import TrafficAnomaly, TrafficMonitor
+from netsentry.core.traffic import TrafficMonitor
 
 
 def test_traffic_monitor_sampling():

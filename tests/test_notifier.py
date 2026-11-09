@@ -1,6 +1,7 @@
 """Tests for multi-channel Notifier (Desktop, Telegram, Webhook)."""
 
 from unittest.mock import MagicMock, patch
+
 from netsentry.config import Config
 from netsentry.core.notifier import Notifier
 

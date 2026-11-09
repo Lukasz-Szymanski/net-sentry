@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+
 from netsentry.core.threat_intel import ThreatIntel
 
 

@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
-import sys
 import time
-from pathlib import Path
 from typing import Optional
 
 from netsentry.config import Config, get_data_dir, load_config

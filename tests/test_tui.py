@@ -1,6 +1,5 @@
 """Unit tests for the interactive TUI Dashboard."""
 
-from unittest.mock import MagicMock, patch
 from netsentry.tui.dashboard import Dashboard
 
 

@@ -26,7 +26,6 @@ from netsentry.core.bpf import BPFProbe
 from netsentry.core.database import Database
 from netsentry.core.detector import ThreatDetector
 from netsentry.core.firewall import Firewall
-from netsentry.core.forensics import compute_file_hash, get_process_forensics
 from netsentry.core.monitor import NetworkMonitor
 from netsentry.core.notifier import Notifier
 from netsentry.core.resolver import IPResolver
@@ -272,7 +271,7 @@ def cmd_lookup(ip: str) -> None:
     db = Database()
     resolver = IPResolver(db=db)
     intel = ThreatIntel()
-    fw = Firewall()
+    Firewall()
     monitor = NetworkMonitor()
 
     with console.status(f"[bold cyan]Querying intelligence records for {ip}...[/bold cyan]"):

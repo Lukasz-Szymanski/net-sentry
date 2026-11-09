@@ -1,7 +1,6 @@
 """Tests for CLI helper utilities, commands, and packaged resources."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from netsentry.cli import _find_data_dir, main
 

@@ -1,8 +1,9 @@
 """Tests for IP resolver and caching engine."""
 
 from pathlib import Path
+
 from netsentry.core.database import Database
-from netsentry.core.resolver import IPResolver, IPInfo
+from netsentry.core.resolver import IPResolver
 
 
 def test_resolver_private_ips(tmp_path: Path):
